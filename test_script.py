@@ -344,3 +344,79 @@ def test_7():
     
     assert txReceipt1["blockNumber"] == txReceipt2["blockNumber"], "txs were not included in the same block"
     assert txReceipt1.status==1 and txReceipt2.status==1, "transaction status incorrect"    
+
+def test_8():
+    '''
+    - Setting the DI account to route through 30 bp uni pools while the non-DI accounts routes through 5 bp pools
+        - When the DI account trades atomically
+            - ✅ Then the tx suceeds and the trade is routed through 30 bp uni pool
+        - When a non-DI account trades atomically
+            - ✅ Then the tx suceeds and the trade is routed through the 5 bp uni pool
+    '''
+    
+    #reset state
+    self.brownie_revert()
+    
+    #Add sETH and sUSD integration
+    self.set_integration(targetAddress=bAccount[1].address,
+                         currencyKey='sETH',
+                         dexPriceAggregator=self.conf["contracts"]["dexPriceAggregator"])
+    self.set_integration(targetAddress=bAccount[1].address,
+                         currencyKey='sUSD',
+                         dexPriceAggregator=self.conf["contracts"]["dexPriceAggregator"])
+        
+    #get some susd on di account and standard account
+    self.eth_to_susd(bAccount[4],int(50e18))
+    
+    #swap sUSD to sETH
+    self.swap_atomically(fromCurrencyKey='sUSD', toCurrencyKey='sETH', fromAmount=self.balance_of('susd', bAccount[4]), account=bAccount[4])
+
+    #send sETH to testing accounts
+    self.contracts["seth"].transfer(bAccount[1].address,int(15e18),{'from':bAccount[4],'gas_price':'1 gwei'})
+    self.contracts["seth"].transfer(bAccount[2].address,int(15e18),{'from':bAccount[4],'gas_price':'1 gwei'})
+                
+    #set dex price standard dex price aggregator to 5 bp pools
+    #on USDC/wETH
+    self.contracts["dex_agg"].setPoolForRoute(self.contracts["usdc"].address,
+                                              self.contracts["weth"].address,
+                                              '0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640',
+                                              {'from':bAccount[-1],'max_fee':int(1e9),'priority_fee':int(1e9)})
+
+    self.contracts["dex_agg_mock"].setPoolForRoute(self.contracts["usdc"].address,
+                                                   self.contracts["weth"].address,
+                                                   '0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8',
+                                                   {'from':bAccount[-1],'max_fee':int(1e9),'priority_fee':int(1e9)})
+        
+    #push the 5 bp pool ETH/USD price down a bit (to distinguish 30 pool from 5 pool prices)
+    #first swap ETH to wETH
+    self.eth_to_weth(account=bAccount[0], amount=int(500e18))
+
+    #swap weth to usdc on the 5 bp pool / market manipulation
+    self.swap_uni(account=bAccount[0], 
+                  fromToken='weth', 
+                  toToken='usdc', 
+                  fromAmount=int(500e18), 
+                  fee=500)
+
+    #fetch prices
+    spot5, twap5 = self.get_uni_prices(ticker='eth', poolFeeBp=5, twap=60*30)
+    spot30, twap30 = self.get_uni_prices(ticker='eth', poolFeeBp=30, twap=60*30)
+    
+    assert not self.is_close(spot5, spot30,3), "manipulation failed"
+        
+    #swap sUSD to sETH
+    _        = self.swap_atomically(fromCurrencyKey='sETH', toCurrencyKey='sUSD', fromAmount=int(10e18), account=bAccount[1])
+    nonDiFee = self.swap_atomically(fromCurrencyKey='sETH', toCurrencyKey='sUSD', fromAmount=int(10e18), account=bAccount[2])
+    
+    #get the fee adjusted fill price on the fee, note that nonDiFee, is used, as test
+    #does not manipulate fees    
+    diPrice = self.balance_of('susd', account=bAccount[1])/10e18/(1-nonDiFee)
+    nonDiPrice = self.balance_of('susd', account=bAccount[2])/10e18/(1-nonDiFee)
+    
+    #get the chainlink price
+    _, linkPrice = self.get_atomic_link_price(fromCurrencyKey='sETH', toCurrencyKey='sUSD')
+    
+    assert self.is_close(nonDiPrice, spot5,3), "manipulated spot 5 price was not used"
+    assert not self.is_close(diPrice, spot5,3), "manipulated spot 5 price was used"
+    assert self.is_close(diPrice, min(spot30,linkPrice,twap30),3), "spot 30 or link price was not used"
+    

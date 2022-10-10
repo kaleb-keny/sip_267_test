@@ -18,7 +18,7 @@ class Prices:
                 address = self.conf["univ3"]["poolAddress"][lpFee][token]        
                 self.uniContractDict[lpFee][token] = w3.eth.contract(address=address,abi=abi)    
     
-    def get_uni_prices(self,ticker,blockNumber,poolFeeBp,twap):
+    def get_uni_prices(self,ticker,poolFeeBp,twap):
         #return spot/twap price for a tickerPrices
         if ticker.lower() == 'usd':
             return 1,1
@@ -31,16 +31,16 @@ class Prices:
             #wbtc/usdc 5 bp need to do weth/usdc*usdc/wbtc
             #get the eth price
             contract = self.uniContractDict[poolFeeBp]['usd']
-            tickCumulatives, _ = contract.functions.observe([0,twap]).call(block_identifier=blockNumber)
+            tickCumulatives, _ = contract.functions.observe([0,twap]).call()
             tick = (tickCumulatives[0]-tickCumulatives[1])  / twap
-            (sqrtPriceX96,_,_,_,_,_,_)=contract.functions.slot0().call(block_identifier=blockNumber)
+            (sqrtPriceX96,_,_,_,_,_,_)=contract.functions.slot0().call()
             ethSpotPrice = 1e12/(sqrtPriceX96/2**96)**2
             ethTwapPrice = 1e12 / 1.0001**tick
 
             contract = self.uniContractDict[poolFeeBp]['btc']
-            tickCumulatives, _ = contract.functions.observe([0,twap]).call(block_identifier=blockNumber)
+            tickCumulatives, _ = contract.functions.observe([0,twap]).call()
             tick = (tickCumulatives[0]-tickCumulatives[1])  / twap
-            (sqrtPriceX96,_,_,_,_,_,_)=contract.functions.slot0().call(block_identifier=blockNumber)
+            (sqrtPriceX96,_,_,_,_,_,_)=contract.functions.slot0().call()
             btcEthSpotPrice = (sqrtPriceX96/2**96)**2/1e10
             btcEthTwapPrice = 1.0001**tick/1e10
 
@@ -50,9 +50,9 @@ class Prices:
         else:
             #getting eth price
             contract = self.uniContractDict[poolFeeBp]['usd']
-            tickCumulatives, _ = contract.functions.observe([0,twap]).call(block_identifier=blockNumber)
+            tickCumulatives, _ = contract.functions.observe([0,twap]).call()
             tick = (tickCumulatives[0]-tickCumulatives[1])  / twap
-            (sqrtPriceX96,_,_,_,_,_,_)=contract.functions.slot0().call(block_identifier=blockNumber)
+            (sqrtPriceX96,_,_,_,_,_,_)=contract.functions.slot0().call()
     
             spotPrice = 1e12/(sqrtPriceX96/2**96)**2
             twapPrice = 1e12 / 1.0001**tick

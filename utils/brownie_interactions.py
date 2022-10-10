@@ -3,7 +3,6 @@ import brownie
 from brownie import Contract as bContract
 from brownie import accounts as bAccount
 from utils.utility import get_w3, get_contract
-import json
 from eth_account import Account
 import numpy as np
 from utils.snx_contract import SnxContracts
@@ -27,8 +26,11 @@ class BrownieInteractions(SnxContracts,Prices):
         
         self.contracts = {}
         
-        contract = get_contract(self.conf,'0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2')
-        self.contracts['weth'] = bContract.from_abi(name='weth',address=contract.address,abi=contract.abi)
+        wethContract = get_contract(self.conf,'0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2')
+        self.contracts['weth'] = bContract.from_abi(name='weth',address=wethContract.address,abi=wethContract.abi)
+                
+        contract = get_contract(self.conf,'0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48')
+        self.contracts['usdc'] = bContract.from_abi(name='usdc',address=contract.address,abi=wethContract.abi)
         
         contract = get_contract(self.conf,'0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45')
         self.contracts['uni'] = bContract.from_abi(name='uni',address=contract.address,abi=contract.abi)
@@ -66,7 +68,13 @@ class BrownieInteractions(SnxContracts,Prices):
         contract = self.get_snx_contract('SystemSettings')
         self.contracts['settings'] = bContract.from_abi(name='settings', address=contract.address, abi=contract.abi)
         
-            
+        #dex aggregartors
+        contract = get_contract(self.conf,'0xf120F029Ac143633d1942e48aE2Dfa2036C5786c')
+        self.contracts['dex_agg'] = bContract.from_abi(name='dex_1',address=contract.address,abi=contract.abi)
+
+        contract = get_contract(self.conf,self.conf["contracts"]["dexPriceAggregator"])
+        self.contracts['dex_agg_mock'] = bContract.from_abi(name='dex_1',address=contract.address,abi=contract.abi)
+                            
     def approve(self,approver,approvee,amount,contractName):
         return self.contracts[contractName].approve(approvee,amount,{"from":approver,'max_fee':int(1e9),'priority_fee':int(1e9)})
     
@@ -167,7 +175,8 @@ class BrownieInteractions(SnxContracts,Prices):
         self.contracts[fromToken].transfer(randomAccount.address,fromAmount,{'from':account,'max_fee':int(1e9),'priority_fee':int(1e9)})
         
         #have the suspense account approve uni to spend from tokens
-        contract = get_contract(self.conf,self.contracts[fromToken].address)
+        contract = self.w3.eth.contract(address = self.contracts[fromToken].address,
+                                        abi = self.contracts[fromToken].abi)
         txPrep = contract.functions.approve(self.contracts["uni"].address,int(fromAmount))
         tx = txPrep.buildTransaction({'chainId': 1,
                                       'gas': int(1e6),
@@ -177,11 +186,13 @@ class BrownieInteractions(SnxContracts,Prices):
                                       'nonce': self.w3.eth.getTransactionCount(randomAccount.address)})
         signedTx = self.w3.eth.account.sign_transaction(tx, randomAccount.key)            
         txHash = self.w3.eth.sendRawTransaction(signedTx.rawTransaction)        
+        time.sleep(10)
         txReceipt = self.w3.eth.getTransactionReceipt(txHash)
         assert txReceipt["status"] == 1,"approve failed"
 
         #swap the tokens on uniswap
-        contract = get_contract(self.conf,self.contracts["uni"].address)
+        contract = self.w3.eth.contract(address = self.contracts["uni"].address,
+                                        abi = self.contracts["uni"].abi)
         txPrep = contract.functions.exactInputSingle({'tokenIn':self.contracts[fromToken].address,
                                                       'tokenOut':self.contracts[toToken].address,
                                                       'fee':fee,
@@ -198,11 +209,13 @@ class BrownieInteractions(SnxContracts,Prices):
                                       'nonce': self.w3.eth.getTransactionCount(randomAccount.address)})
         signedTx = self.w3.eth.account.sign_transaction(tx, randomAccount.key)            
         txHash = self.w3.eth.sendRawTransaction(signedTx.rawTransaction)        
+        time.sleep(10)
         txReceipt = self.w3.eth.getTransactionReceipt(txHash)
         assert txReceipt["status"] == 1,"swap failed"
         
         #send the tokens to account
-        contract = get_contract(self.conf,self.contracts[toToken].address)
+        contract = self.w3.eth.contract(address = self.contracts[toToken].address,
+                                        abi = self.contracts[toToken].abi)
         
         txPrep = contract.functions.transfer(account.address,contract.functions.balanceOf(randomAccount.address).call())
         tx = txPrep.buildTransaction({'chainId': 1,
@@ -212,10 +225,10 @@ class BrownieInteractions(SnxContracts,Prices):
                                       'type': 2 ,
                                       'nonce': self.w3.eth.getTransactionCount(randomAccount.address)})
         signedTx = self.w3.eth.account.sign_transaction(tx, randomAccount.key)            
-        txHash = self.w3.eth.sendRawTransaction(signedTx.rawTransaction)        
+        txHash = self.w3.eth.sendRawTransaction(signedTx.rawTransaction)     
+        time.sleep(10)
         txReceipt = self.w3.eth.getTransactionReceipt(txHash)
         assert txReceipt["status"] == 1,"sending tokens back to account failed"        
-        return self.w3.eth.sendRawTransaction(signedTx.rawTransaction)        
         
     def eth_to_weth(self,account,amount):        
         return self.contracts["weth"].deposit({'value':amount,
