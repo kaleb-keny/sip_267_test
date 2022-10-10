@@ -3,11 +3,14 @@ import brownie
 from brownie import Contract as bContract
 from brownie import accounts as bAccount
 from utils.utility import get_w3, get_contract
+import json
 from eth_account import Account
 import numpy as np
 from utils.snx_contract import SnxContracts
 from utils.prices import Prices
 import time
+from web3.providers.base import JSONBaseProvider
+base_provider = JSONBaseProvider()
 
 class BrownieInteractions(SnxContracts,Prices):
     
@@ -17,7 +20,7 @@ class BrownieInteractions(SnxContracts,Prices):
         SnxContracts.__init__(self,conf)
         Prices.__init__(self,conf)
         self.conf=conf
-        self.connect_brownie()
+        self.brownie_init()
         self.setup_contracts()                
             
     def setup_contracts(self):
@@ -37,11 +40,15 @@ class BrownieInteractions(SnxContracts,Prices):
 
         #setup susd contract
         contract = self.get_snx_contract(contractNameAddress="ProxyERC20sUSD",contractNameAbi='ProxyERC20')
-        self.contracts['susd'] = bContract.from_abi(name='snx', address=contract.address, abi=contract.abi)
+        self.contracts['susd'] = bContract.from_abi(name='susd', address=contract.address, abi=contract.abi)
 
         #setup seth contract
         contract = self.get_snx_contract(contractNameAddress="ProxysETH",contractNameAbi='ProxyERC20')
-        self.contracts['seth'] = bContract.from_abi(name='snx', address=contract.address, abi=contract.abi)
+        self.contracts['seth'] = bContract.from_abi(name='seth', address=contract.address, abi=contract.abi)
+
+        #setup sEUR contract
+        contract = self.get_snx_contract(contractNameAddress="ProxysEUR",contractNameAbi='ProxyERC20')
+        self.contracts['seur'] = bContract.from_abi(name='seur', address=contract.address, abi=contract.abi)
         
         #setup direct integration contract
         contract = self.get_snx_contract('DirectIntegrationManager')
@@ -49,11 +56,15 @@ class BrownieInteractions(SnxContracts,Prices):
         
         #setup collateral eth contract
         contract = self.get_snx_contract('CollateralEth')
-        self.contracts['collateral_eth'] = bContract.from_abi(name='di', address=contract.address, abi=contract.abi)
+        self.contracts['collateral_eth'] = bContract.from_abi(name='collateral_eth', address=contract.address, abi=contract.abi)
         
         #setup collateral eth contract
         contract = self.get_snx_contract('ExchangeRates')
-        self.contracts['exchange_rates'] = bContract.from_abi(name='di', address=contract.address, abi=contract.abi)
+        self.contracts['exchange_rates'] = bContract.from_abi(name='exchange_rates', address=contract.address, abi=contract.abi)
+
+        #setup collateral eth contract
+        contract = self.get_snx_contract('SystemSettings')
+        self.contracts['settings'] = bContract.from_abi(name='settings', address=contract.address, abi=contract.abi)
         
             
     def approve(self,approver,approvee,amount,contractName):
@@ -102,7 +113,50 @@ class BrownieInteractions(SnxContracts,Prices):
                                                                    {'from' : bAccount[-1],
                                                                     'max_fee':int(1e9),
                                                                     'priority_fee':int(1e9)})
-        
+    
+    def get_integration(self,diAddress,currencyKey):
+        headers = ['currencyKey',
+                   'dexPriceAggregator',
+                   'atomicEquivalentForDexPricing',
+                   'atomicExchangeFeeRate',
+                   'atomicTwapWindow',
+                   'atomicMaxTwapDelta',
+                   'atomicMaxVolumePerBlock',
+                   'atomicVolatilityConsiderationWindow',
+                   'atomicVolatilityTwapSeconds',
+                   'atomicVolatilityUpdateThreshold',
+                   'exchangeFeeRate',
+                   'exchangeMaxDynamicFee',
+                   'exchangeDynamicFeeRounds',
+                   'exchangeDynamicFeeThreshold',
+                   'exchangeDynamicFeeWeightDecay']        
+        currencyKeyHex = self.w3.toHex(text=currencyKey).ljust(66,"0")
+        output = self.contracts["integration"].getExchangeParameters(diAddress,currencyKeyHex)
+        outputDict = {header: parameter for header, parameter in zip(headers,output)}
+        outputDict["currencyKey"] = self.w3.toText(outputDict["currencyKey"]).replace("\x00",'')
+        return outputDict
+                    
+    def set_classic_exchange_fee(self,currencyKey,fee):
+        currencyKeyHex = self.w3.toHex(text=currencyKey).ljust(66,"0")
+        return self.contracts["settings"].setExchangeFeeRateForSynths([currencyKeyHex],[fee],{'from' : bAccount[-1],'max_fee':int(1e9),'priority_fee':int(1e9)})
+
+    def set_atomic_exchange_fee(self,currencyKey,fee):
+        currencyKeyHex = self.w3.toHex(text=currencyKey).ljust(66,"0")
+        return self.contracts["settings"].setAtomicExchangeFeeRate(currencyKeyHex,fee,{'from' : bAccount[-1],'max_fee':int(1e9),'priority_fee':int(1e9)})
+
+    def set_atomic_max_volume_per_block(self,maxVolumePerBlock):
+        return self.contracts["settings"].setAtomicMaxVolumePerBlock(maxVolumePerBlock,{'from' : bAccount[-1],'max_fee':int(1e9),'priority_fee':int(1e9)})
+    
+    def set_dynamic_parameters(self,rounds=None,threshold=None,decay=None,maxFee=None):
+        if rounds:
+            self.contracts["settings"].setExchangeDynamicFeeRounds(rounds,{'from' : bAccount[-1],'max_fee':int(1e9),'priority_fee':int(1e9)})
+        if threshold:
+            self.contracts["settings"].setExchangeDynamicFeeThreshold(threshold,{'from' : bAccount[-1],'max_fee':int(1e9),'priority_fee':int(1e9)})
+        if decay:
+            self.contracts["settings"].setExchangeDynamicFeeWeightDecay(decay,{'from' : bAccount[-1],'max_fee':int(1e9),'priority_fee':int(1e9)})
+        if maxFee:
+            self.contracts["settings"].setExchangeMaxDynamicFee(maxFee,{'from' : bAccount[-1],'max_fee':int(1e9),'priority_fee':int(1e9)})
+       
     def swap_uni(self,account,fromToken,toToken,fromAmount,fee):        
         #create some random account
         randomAccount = Account.create()        
@@ -170,10 +224,10 @@ class BrownieInteractions(SnxContracts,Prices):
                                                'priority_fee':int(1e9)})
     
     def eth_to_susd(self,account,ethAmount):
-        ethPrice = self.get_link_price('sETH')
+        atomicRate, linkRate = self.get_atomic_link_price('sETH','sUSD')
         currencyKeyHex = self.w3.toHex(text='sUSD').ljust(66,"0")
         return self.contracts["collateral_eth"].open(\
-                                                     int(ethAmount*ethPrice/1.31),\
+                                                     int(ethAmount*linkRate/1.31),\
                                                          currencyKeyHex,\
                                                              {'value':ethAmount,
                                                               'from':account,
@@ -183,7 +237,7 @@ class BrownieInteractions(SnxContracts,Prices):
     def swap_atomically(self,fromCurrencyKey,toCurrencyKey,fromAmount,account):
         fromAmountPre = self.balance_of(fromCurrencyKey.lower(), account)
         toAmountPre   = self.balance_of(toCurrencyKey.lower(), account)        
-        atomicRate, chainlinkRate  = self.get_atomic_link_price(fromCurrencyKey=fromCurrencyKey, toCurrencyKey=toCurrencyKey)
+        atomicRate, linkRate  = self.get_atomic_link_price(fromCurrencyKey=fromCurrencyKey, toCurrencyKey=toCurrencyKey)
         fromHex   = Web3.toHex(text=fromCurrencyKey).ljust(66,"0")
         toHex     = Web3.toHex(text=toCurrencyKey).ljust(66,"0")
         self.contracts["snx"].exchangeAtomically(fromHex,
@@ -193,41 +247,68 @@ class BrownieInteractions(SnxContracts,Prices):
                                                  0,
                                                  {'from':account,
                                                   'max_fee':int(1e9),
-                                                  'priority_fee':int(1e9)})        
+                                                  'priority_fee':int(1e9)})
+        fromAmountPost = self.balance_of(fromCurrencyKey.lower(), account)
+        toAmountPost   = self.balance_of(toCurrencyKey.lower(), account)        
+        return  1 - (toAmountPost-toAmountPre)/((fromAmountPre-fromAmountPost)*atomicRate)
+    
+    
+    def get_atomic_swap_signed_tx(self,fromCurrencyKey,toCurrencyKey,fromAmount,account,incrementNonce=0):
+        fromHex   = Web3.toHex(text=fromCurrencyKey).ljust(66,"0")
+        toHex     = Web3.toHex(text=toCurrencyKey).ljust(66,"0")
+        snxContract   = self.get_snx_contract(contractNameAddress="Synthetix")
+        txPrep = snxContract.functions.exchangeAtomically(fromHex,
+                                                          fromAmount,
+                                                          toHex,
+                                                          '0x0000000000000000000000000000000000000000',
+                                                          0)
+        
+        tx = txPrep.buildTransaction({'chainId': 1,
+                                      'gas': int(1e6),
+                                      'maxFeePerGas': int(1e9),
+                                      'maxPriorityFeePerGas': int(1e9),
+                                      'type': 2 ,
+                                      'nonce': self.w3.eth.getTransactionCount(account.address)+incrementNonce})
+        
+        tx = self.w3.eth.account.sign_transaction(tx, account.key)            
+        
+        return base_provider.encode_rpc_request('eth_sendRawTransaction', [tx.rawTransaction.hex()])
+        
+    
+    def swap_classic(self,fromCurrencyKey,toCurrencyKey,fromAmount,account):
+        fromAmountPre = self.balance_of(fromCurrencyKey.lower(), account)
+        toAmountPre   = self.balance_of(toCurrencyKey.lower(), account)        
+        atomicRate, linkRate = self.get_atomic_link_price(fromCurrencyKey=fromCurrencyKey, toCurrencyKey=toCurrencyKey)
+        fromHex   = Web3.toHex(text=fromCurrencyKey).ljust(66,"0")
+        toHex     = Web3.toHex(text=toCurrencyKey).ljust(66,"0")
+        self.contracts["snx"].exchangeWithTracking(fromHex,
+                                                   fromAmount,
+                                                   toHex,
+                                                   '0x0000000000000000000000000000000000000000',
+                                                   '0x0000000000000000000000000000000000000000',
+                                                   {'from':account,
+                                                    'max_fee':int(1e9),
+                                                    'priority_fee':int(1e9)})        
         fromAmountPost = self.balance_of(fromCurrencyKey.lower(), account)
         toAmountPost   = self.balance_of(toCurrencyKey.lower(), account)
-        
-        return  1 - (toAmountPost-toAmountPre)/((fromAmountPre-fromAmountPost)*atomicRate)
-            
+        return  1 - (toAmountPost-toAmountPre)/((fromAmountPre-fromAmountPost)*linkRate)
+    
     def find_nearest_to_atomic(self,atomic,twap,spot,cl):
         rateNames = np.array(['twap','spot','cl'])
         deltas = np.array([abs(atomic/rate-1) for rate in [twap,spot,cl]])
         return rateNames[np.min(deltas) == deltas].item()
     
-    def initialize_balances(self):
-        #in case of pending transactions
-        self.cancel_tx()
+    def is_close(self,firstNumber,secondNumber,dof=10):
+        return abs(firstNumber/secondNumber-1)<1/10**dof
 
-        #approve the weth/usdc to be spent on the router
-        self.approve(contract=self.wethContract,amount=1e12*1e18, contractAddress=self.uniRouter.address)
-        self.approve(contract=self.usdcContract,amount=1e12*1e18, contractAddress=self.uniRouter.address)
 
-        usdcBalance = self.get_balance(self.usdcContract)
-        if usdcBalance > 0:
-            self.swap_uni(fromTokenAddress=self.usdcContract.address, 
-                          toTokenAddress=self.wethContract.address, 
-                          fromAmount=usdcBalance,
-                          fee=3000)
-        wethBalance = self.get_balance(self.wethContract)        
-        if wethBalance > 0:
-            self.weth_to_eth(wethBalance)
+    def brownie_revert(self):
+        brownie.chain.revert()
 
-    def reset_state(self):
-        brownie.chain.reset()
-
-    def connect_brownie(self):
+    def brownie_init(self):
 
         self.w3 = get_w3(conf=self.conf)
+        self.specialAccounts = []
 
         if brownie.network.is_connected():
             self.disconnect_brownie()
@@ -235,19 +316,21 @@ class BrownieInteractions(SnxContracts,Prices):
         #connect
         brownie.network.connect('267-fork')
         
-        #unlock the pk
-        suspenseAddress = Account.from_key(self.conf["pk"]).address
-        bAccount.at(suspenseAddress ,force=True)
-        
+        #setup few random accounts and fund them
+        for x in range(4):
+            bAccount.add()
+            bAccount[0].transfer(bAccount[x+1],"100 ether",gas_price="1 gwei")
+            self.specialAccounts.append(Account.create())
+         
+        for account in self.specialAccounts:
+            bAccount[0].transfer(account.address,"100 ether",gas_price="1 gwei")
+                            
         #unlock the owner
         contract = self.get_snx_contract(contractNameAddress='Issuer')
         ownerAddress = contract.functions.owner().call()
         bAccount.at(ownerAddress,force=True)
+        brownie.chain.snapshot()
 
-                        
+        
     def disconnect_brownie(self):
-        brownie.network.disconnect()
-                
-#%%
-if __name__=='__main__':
-    self=TestingKit(conf)
+        brownie.network.disconnect()          

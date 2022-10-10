@@ -66,7 +66,3 @@ class Prices:
                                                                                                                                            int(1e18),
                                                                                                                                            toHex).call()
         return atomicRate/1e18 , systemRate/1e18
-    
-    def get_link_price(self,currencyKey):
-        currencyKeyHex   = Web3.toHex(text=currencyKey).ljust(66,"0")
-        return self.exchangerRatesContract.functions.rateForCurrency(currencyKeyHex).call()/1e18

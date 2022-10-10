@@ -2,6 +2,10 @@ import time
 import requests
 import yaml
 import web3 as w3
+from aiohttp import ClientSession
+import asyncio
+import nest_asyncio
+nest_asyncio.apply()
 
 def parse_config(path):
     with open(path, 'r') as stream:
@@ -32,3 +36,18 @@ def get_contract(conf,address):
     abi = get_abi(conf,address)
     w3 = get_w3(conf)
     return w3.eth.contract(address=address,abi=abi)
+
+async def run_post_request(session,url,data):
+    async with session.post(url=url,data=data,headers={'Content-Type': 'application/json'}) as response:
+        return await response.json(content_type=None)
+
+async def setup_post_request(payloadList,conf):
+    tasks = list()
+    async with ClientSession() as session:
+        for payload in payloadList:
+            task = asyncio.ensure_future(run_post_request(session=session,
+                                                          url=conf["node"],
+                                                          data=payload))
+            tasks.append(task)
+        responses = await asyncio.gather(*tasks)
+    return responses
