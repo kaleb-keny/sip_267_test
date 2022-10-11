@@ -74,6 +74,16 @@ class BrownieInteractions(SnxContracts,Prices):
 
         contract = get_contract(self.conf,self.conf["contracts"]["dexPriceAggregator"])
         self.contracts['dex_agg_mock'] = bContract.from_abi(name='dex_1',address=contract.address,abi=contract.abi)
+        
+        #setup mock aggergator
+        address  = self.conf["contracts"]["mockAggregator"]
+        contract = get_contract(conf=self.conf,address=address)
+        self.contracts["mock"] = bContract.from_abi(name='mock', address=contract.address, abi=contract.abi)        
+
+        #Setup CircuitBreaker
+        contract = self.get_snx_contract("CircuitBreaker")
+        self.contracts['breaker'] = bContract.from_abi(name='breaker', address=contract.address, abi=contract.abi)        
+
                             
     def approve(self,approver,approvee,amount,contractName):
         return self.contracts[contractName].approve(approvee,amount,{"from":approver,'max_fee':int(1e9),'priority_fee':int(1e9)})
@@ -144,7 +154,7 @@ class BrownieInteractions(SnxContracts,Prices):
         outputDict["currencyKey"] = self.w3.toText(outputDict["currencyKey"]).replace("\x00",'')
         return outputDict
                     
-    def set_classic_exchange_fee(self,currencyKey,fee):
+    def set_exchange_fee(self,currencyKey,fee):
         currencyKeyHex = self.w3.toHex(text=currencyKey).ljust(66,"0")
         return self.contracts["settings"].setExchangeFeeRateForSynths([currencyKeyHex],[fee],{'from' : bAccount[-1],'max_fee':int(1e9),'priority_fee':int(1e9)})
 
@@ -154,15 +164,23 @@ class BrownieInteractions(SnxContracts,Prices):
 
     def set_atomic_max_volume_per_block(self,maxVolumePerBlock):
         return self.contracts["settings"].setAtomicMaxVolumePerBlock(maxVolumePerBlock,{'from' : bAccount[-1],'max_fee':int(1e9),'priority_fee':int(1e9)})
+
+    def set_atomic_volatility_threshold(self,currencyKey,volatilityThreshold):
+        currencyKeyHex = self.w3.toHex(text=currencyKey).ljust(66,"0")
+        return self.contracts["settings"].setAtomicVolatilityUpdateThreshold(currencyKeyHex ,volatilityThreshold,{'from' : bAccount[-1],'max_fee':int(1e9),'priority_fee':int(1e9)})
+
+    def set_atomic_consideration_window(self,currencyKey,window):
+        currencyKeyHex = self.w3.toHex(text=currencyKey).ljust(66,"0")
+        return self.contracts["settings"].setAtomicVolatilityConsiderationWindow(currencyKeyHex,window,{'from' : bAccount[-1],'max_fee':int(1e9),'priority_fee':int(1e9)})
     
     def set_dynamic_parameters(self,rounds=None,threshold=None,decay=None,maxFee=None):
-        if rounds:
+        if not rounds is None:
             self.contracts["settings"].setExchangeDynamicFeeRounds(rounds,{'from' : bAccount[-1],'max_fee':int(1e9),'priority_fee':int(1e9)})
-        if threshold:
+        if not threshold is None:
             self.contracts["settings"].setExchangeDynamicFeeThreshold(threshold,{'from' : bAccount[-1],'max_fee':int(1e9),'priority_fee':int(1e9)})
-        if decay:
+        if not decay is None:
             self.contracts["settings"].setExchangeDynamicFeeWeightDecay(decay,{'from' : bAccount[-1],'max_fee':int(1e9),'priority_fee':int(1e9)})
-        if maxFee:
+        if not maxFee is None:
             self.contracts["settings"].setExchangeMaxDynamicFee(maxFee,{'from' : bAccount[-1],'max_fee':int(1e9),'priority_fee':int(1e9)})
        
     def swap_uni(self,account,fromToken,toToken,fromAmount,fee):        
@@ -314,6 +332,15 @@ class BrownieInteractions(SnxContracts,Prices):
     def is_close(self,firstNumber,secondNumber,dof=10):
         return abs(firstNumber/secondNumber-1)<1/10**dof
 
+    def set_oracle_to_mock(self,currencyKey):
+        currencyKeyHex = self.w3.toHex(text=currencyKey).ljust(66,"0")
+        return self.contracts["exchange_rates"].addAggregator(currencyKeyHex,self.contracts["mock"].address,{'from':bAccount[-1],'gas_price':'1 gwei'})
+
+    def set_mock_price(self,newPrice,timestamp):
+        return self.contracts["mock"].setLatestAnswer(newPrice,timestamp,{'from':bAccount[0],'gas_price':'1 gwei'})
+
+    def reset_circuit_breaker(self,address):
+        return self.contracts["breaker"].resetLastValue([address],[0],{'from':bAccount[-1],'gas_price':'1 gwei'})
 
     def brownie_revert(self):
         brownie.chain.revert()
