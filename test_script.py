@@ -159,13 +159,13 @@ def test_4():
         
     #push the 5 bp pool ETH/USD price down a bit (to distinguish 30 pool from 5 pool prices)
     #first swap ETH to wETH
-    self.eth_to_weth(account=bAccount[0], amount=int(500e18))
+    self.eth_to_weth(account=bAccount[0], amount=int(2500e18))
 
     #swap weth to usdc on the 5 bp pool / market manipulation
     self.swap_uni(account=bAccount[0], 
                   fromToken='weth', 
                   toToken='usdc', 
-                  fromAmount=int(500e18), 
+                  fromAmount=int(2500e18), 
                   fee=500)
 
     #fetch prices
@@ -231,13 +231,13 @@ def test_5():
         
     #push the 5 bp pool ETH/USD price down a bit (to distinguish 30 pool from 5 pool prices)
     #first swap ETH to wETH
-    self.eth_to_weth(account=bAccount[0], amount=int(500e18))
+    self.eth_to_weth(account=bAccount[0], amount=int(2500e18))
 
     #swap weth to usdc on the 5 bp pool / market manipulation
     self.swap_uni(account=bAccount[0], 
                   fromToken='weth', 
                   toToken='usdc', 
-                  fromAmount=int(500e18), 
+                  fromAmount=int(2500e18), 
                   fee=500)
 
     #fetch prices
