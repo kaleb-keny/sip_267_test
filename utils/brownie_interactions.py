@@ -254,11 +254,15 @@ class BrownieInteractions(SnxContracts,Prices):
                                                'max_fee':int(1e9),
                                                'priority_fee':int(1e9)})
     
-    def eth_to_susd(self,account,ethAmount):
-        atomicRate, linkRate = self.get_atomic_link_price('sETH','sUSD')
-        currencyKeyHex = self.w3.toHex(text='sUSD').ljust(66,"0")
+    def eth_to_synth(self,account,ethAmount,currencyKey):        
+        currencyKeyHex = self.w3.toHex(text=currencyKey).ljust(66,"0")
+        if currencyKey=='sUSD':
+            atomicRate, linkRate = self.get_atomic_link_price('sETH','sUSD')
+            amountOut = int(ethAmount*linkRate/1.31)
+        elif currencyKey == 'sETH':
+            amountOut = int(ethAmount/1.31)
         return self.contracts["collateral_eth"].open(\
-                                                     int(ethAmount*linkRate/1.31),\
+                                                     amountOut,\
                                                          currencyKeyHex,\
                                                              {'value':ethAmount,
                                                               'from':account,
@@ -335,6 +339,10 @@ class BrownieInteractions(SnxContracts,Prices):
     def set_oracle_to_mock(self,currencyKey):
         currencyKeyHex = self.w3.toHex(text=currencyKey).ljust(66,"0")
         return self.contracts["exchange_rates"].addAggregator(currencyKeyHex,self.contracts["mock"].address,{'from':bAccount[-1],'gas_price':'1 gwei'})
+
+    def set_oracle_to_chainlink(self,currencyKey,address):
+        currencyKeyHex = self.w3.toHex(text=currencyKey).ljust(66,"0")
+        return self.contracts["exchange_rates"].addAggregator(currencyKeyHex,address,{'from':bAccount[-1],'gas_price':'1 gwei'})
 
     def set_mock_price(self,newPrice,timestamp):
         return self.contracts["mock"].setLatestAnswer(newPrice,timestamp,{'from':bAccount[0],'gas_price':'1 gwei'})
