@@ -51,6 +51,11 @@ git clone git@github.com:kaleb-keny/sip_267_test.git
 #### ACTIVATE VIRTUAL ENVIRONMENT
 ```source sip267/bin/activate```
 
+#### Create Brownie Test Network
+```
+brownie networks add Development 267-fork host=http://127.0.0.1 cmd=hardhat-cli chain_id=1  port=8545
+```
+
 #### Install Requirements
 ```pip install -r env/requirements.txt```
 
