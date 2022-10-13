@@ -1,0 +1,26 @@
+---
+node: 'http://127.0.0.1:8545'
+
+etherscan: 'https://api.etherscan.io/api?module=contract&action=getabi&address={}&apikey=XXXXXXXXXXXXXXx'
+
+multicaller:
+    ethereum: '0xeefBa1e63905eF1D7ACbA5a8513c70307C1cE441'
+    optimism: '0x2DC0E2aa608532Da689e89e237dF582B783E552C'    
+
+snxContracts:  'https://raw.githubusercontent.com/Synthetixio/synthetix/master/publish/deployed/mainnet/versions.json'
+
+univ3:
+    poolAddress:
+        5:
+            btc: '0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0'
+            usd: '0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640'
+        30:
+            btc: '0xCBCdF9626bC03E24f779434178A73a0B4bad62eD'
+            usd: '0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8'
+    poolAbi: '0x8f8EF111B67C04Eb1641f5ff19EE54Cda062f163'        
+
+    router: '0xE592427A0AEce92De3Edee1F18E0157C05861564'
+    
+contracts:
+    mockAggregator: '0xa7d02bC7f0e21e5e69D5410568F5E1391b9c9F8a'
+    dexPriceAggregator: '0x9645C7de2DBe8AAda01868cAa393cB7e5253268c'
